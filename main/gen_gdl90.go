@@ -1345,7 +1345,7 @@ func fsWriteTest(dir string) error {
 }
 
 func printStats() {
-	statTimer := time.NewTicker(30 * time.Second)
+	statTimer := time.NewTicker(120 * time.Second)
 	for {
 		<-statTimer.C
 		var memstats runtime.MemStats
