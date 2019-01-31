@@ -1108,8 +1108,8 @@ func processNMEALine(l string) (sentenceUsed bool) {
 					svType = SAT_TYPE_GPS
 					svStr = fmt.Sprintf("G%d", sv)
 				} else if sv < 65 { // indicates SBAS: WAAS, EGNOS, MSAS, etc.
-					svType = SAT_TYPE_UNKNOWN
-					svStr = fmt.Sprintf("B%d", sv+87) // add 87 to convert from NMEA to PRN.
+					svType = SAT_TYPE_BEIDOU
+					svStr = fmt.Sprintf("B%d", sv-32) // add 87 to convert from NMEA to PRN.
 				} else if sv < 97 { // GLONASS
 					svType = SAT_TYPE_GLONASS
 					svStr = fmt.Sprintf("R%d", sv-64) // subtract 64 to convert from NMEA to PRN.
