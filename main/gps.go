@@ -204,11 +204,11 @@ func initGPSSerial() bool {
 	} else if _, err := os.Stat("/dev/ublox6"); err == nil { // u-blox 6 (VK-162 Rev 1).
 		device = "/dev/ublox6"
 		globalStatus.GPS_detected_type = GPS_TYPE_UBX6
-	} else if _, err := os.Stat("/dev/prolific0"); err == nil { // Assume it's a BU-353-S4 SIRF IV.
+	} else if _, err := os.Stat("/dev/USB0"); err == nil { // Assume it's a Adafruit GPS.
 		//TODO: Check a "serialout" flag and/or deal with multiple prolific devices.
 		isSirfIV = true
-		baudrate = 4800
-		device = "/dev/prolific0"
+		baudrate = 9600
+		device = "/dev/USB0"
 		globalStatus.GPS_detected_type = GPS_TYPE_PROLIFIC
 	} else if _, err := os.Stat("/dev/ttyAMA0"); err == nil { // ttyAMA0 is PL011 UART (GPIO pins 8 and 10) on all RPi.
 		device = "/dev/ttyAMA0"
@@ -230,10 +230,10 @@ func initGPSSerial() bool {
 	}
 
 	if isSirfIV {
-		log.Printf("Using SiRFIV config.\n")
-		// Enable 38400 baud.
-		p.Write(makeNMEACmd("PSRF100,1,38400,8,1,0"))
-		baudrate = 38400
+		log.Printf("Using MTK3339 config.\n")
+		// Enable 115200 baud.
+		p.Write(makeNMEACmd("PMTK251,115200"))
+		baudrate = 115200
 		p.Close()
 
 		time.Sleep(250 * time.Millisecond)
@@ -241,22 +241,10 @@ func initGPSSerial() bool {
 		serialConfig = &serial.Config{Name: device, Baud: baudrate}
 		p, err = serial.OpenPort(serialConfig)
 
-		// Enable 5Hz. (To switch back to 1Hz: $PSRF103,00,7,00,0*22)
-		p.Write(makeNMEACmd("PSRF103,00,6,00,0"))
-
-		// Enable GGA.
-		p.Write(makeNMEACmd("PSRF103,00,00,01,01"))
-		// Enable GSA.
-		p.Write(makeNMEACmd("PSRF103,02,00,01,01"))
-		// Enable RMC.
-		p.Write(makeNMEACmd("PSRF103,04,00,01,01"))
-		// Enable VTG.
-		p.Write(makeNMEACmd("PSRF103,05,00,01,01"))
-		// Enable GSV (once every 5 position updates)
-		p.Write(makeNMEACmd("PSRF103,03,00,05,01"))
+		p.Write(makeNMEACmd("PMTK220,500"))
 
 		if globalSettings.DEBUG {
-			log.Printf("Finished writing SiRF GPS config to %s. Opening port to test connection.\n", device)
+			log.Printf("Finished writing MTK3339 GPS config to %s. Opening port to test connection.\n", device)
 		}
 	} else {
 		// Byte order for UBX configuration is little endian.
@@ -298,15 +286,15 @@ func initGPSSerial() bool {
 		cfgGnss := []byte{0x00, 0x20, 0x20, 0x06}
 		gps := []byte{0x00, 0x08, 0x10, 0x00, 0x01, 0x00, 0x01, 0x01}  // enable GPS with 8-16 tracking channels
 		sbas := []byte{0x01, 0x02, 0x03, 0x00, 0x01, 0x00, 0x01, 0x01} // enable SBAS (WAAS) with 2-3 tracking channels
-		beidou := []byte{0x03, 0x00, 0x10, 0x00, 0x00, 0x00, 0x01, 0x01}
-		qzss := []byte{0x05, 0x00, 0x03, 0x00, 0x00, 0x00, 0x01, 0x01}
+		beidou := []byte{0x03, 0x04, 0x10, 0x00, 0x01, 0x00, 0x01, 0x01}  // enable Beidou with 4-16 tracking channels
+		qzss := []byte{0x05, 0x00, 0x03, 0x00, 0x01, 0x00, 0x01, 0x01}
 		glonass := []byte{0x06, 0x04, 0x0E, 0x00, 0x00, 0x00, 0x01, 0x01} // this disables GLONASS
 		galileo := []byte{0x02, 0x04, 0x08, 0x00, 0x00, 0x00, 0x01, 0x01} // this disables Galileo
 
 		if (globalStatus.GPS_detected_type == GPS_TYPE_UBX8) || (globalStatus.GPS_detected_type == GPS_TYPE_UART) { // assume that any GPS connected to serial GPIO is ublox8 (RY835/6AI)
-			log.Printf("UBX8 device detected on USB, or GPS serial connection in use. Attempting GLONASS and Galelio configuration.\n")
-			glonass = []byte{0x06, 0x08, 0x0E, 0x00, 0x01, 0x00, 0x01, 0x01} // this enables GLONASS with 8-14 tracking channels
-			galileo = []byte{0x02, 0x04, 0x08, 0x00, 0x01, 0x00, 0x01, 0x01} // this enables Galileo with 4-8 tracking channels
+			log.Printf("UBX8 device detected on USB, or GPS serial connection in use. Attempting GLONASS configuration.\n")
+			glonass = []byte{0x06, 0x04, 0x0E, 0x00, 0x01, 0x00, 0x01, 0x01} // this enables GLONASS with 4-14 tracking channels
+			//galileo = []byte{0x02, 0x04, 0x08, 0x00, 0x01, 0x00, 0x01, 0x01} // this enables Galileo with 4-8 tracking channels
 			updatespeed = []byte{0x06, 0x00, 0xF4, 0x01, 0x01, 0x00}         // Nav speed 2Hz
 		}
 		cfgGnss = append(cfgGnss, gps...)
@@ -344,6 +332,8 @@ func initGPSSerial() bool {
 		p.Write(makeUBXCFG(0x06, 0x01, 8, []byte{0xF1, 0x03, 0x00, 0x05, 0x00, 0x05, 0x00, 0x00})) // Ublox,3
 		p.Write(makeUBXCFG(0x06, 0x01, 8, []byte{0xF1, 0x04, 0x00, 0x0A, 0x00, 0x0A, 0x00, 0x00})) // Ublox,4
 
+		// TBA: Set NMEA to v4.1
+		
 		// Reconfigure serial port.
 		cfg := make([]byte, 20)
 		cfg[0] = 0x01 // portID.
@@ -1118,12 +1108,12 @@ func processNMEALine(l string) (sentenceUsed bool) {
 					svType = SAT_TYPE_GPS
 					svStr = fmt.Sprintf("G%d", sv)
 				} else if sv < 65 { // indicates SBAS: WAAS, EGNOS, MSAS, etc.
-					svType = SAT_TYPE_SBAS
-					svStr = fmt.Sprintf("S%d", sv+87) // add 87 to convert from NMEA to PRN.
+					svType = SAT_TYPE_UNKNOWN
+					svStr = fmt.Sprintf("B%d", sv+87) // add 87 to convert from NMEA to PRN.
 				} else if sv < 97 { // GLONASS
 					svType = SAT_TYPE_GLONASS
 					svStr = fmt.Sprintf("R%d", sv-64) // subtract 64 to convert from NMEA to PRN.
-				} else if (sv >= 120) && (sv < 162) { // indicates SBAS: WAAS, EGNOS, MSAS, etc.
+				} else if (sv >= 120) && (sv < 159) { // indicates SBAS: WAAS, EGNOS, MSAS, etc.
 					svType = SAT_TYPE_SBAS
 					svStr = fmt.Sprintf("S%d", sv)
 					sv -= 87 // subtract 87 to convert to NMEA from PRN.
