@@ -286,16 +286,16 @@ func initGPSSerial() bool {
 		cfgGnss := []byte{0x00, 0x20, 0x20, 0x06}
 		gps := []byte{0x00, 0x08, 0x10, 0x00, 0x01, 0x00, 0x01, 0x01}  // enable GPS with 8-16 tracking channels
 		sbas := []byte{0x01, 0x02, 0x03, 0x00, 0x01, 0x00, 0x01, 0x01} // enable SBAS (WAAS) with 2-3 tracking channels
-		beidou := []byte{0x03, 0x04, 0x10, 0x00, 0x01, 0x00, 0x01, 0x01}  // enable Beidou with 4-16 tracking channels
+		beidou := []byte{0x03, 0x04, 0x10, 0x00, 0x00, 0x00, 0x01, 0x01}  // disable Beidou with 4-16 tracking channels
 		qzss := []byte{0x05, 0x00, 0x03, 0x00, 0x01, 0x00, 0x05, 0x05} // enable QZSS with L1S
 		glonass := []byte{0x06, 0x04, 0x0E, 0x00, 0x00, 0x00, 0x01, 0x01} // this disables GLONASS
 		galileo := []byte{0x02, 0x04, 0x08, 0x00, 0x00, 0x00, 0x01, 0x01} // this disables Galileo
 
 		if (globalStatus.GPS_detected_type == GPS_TYPE_UBX8) || (globalStatus.GPS_detected_type == GPS_TYPE_UART) { // assume that any GPS connected to serial GPIO is ublox8 (RY835/6AI)
 			log.Printf("UBX8 device detected. Update speed changed to 2HZ.\n")
-			//glonass = []byte{0x06, 0x04, 0x0E, 0x00, 0x01, 0x00, 0x01, 0x01} // this enables GLONASS with 4-14 tracking channels
-			//galileo = []byte{0x02, 0x04, 0x08, 0x00, 0x01, 0x00, 0x01, 0x01} // this enables Galileo with 4-8 tracking channels
-			updatespeed = []byte{0x06, 0x00, 0xF4, 0x01, 0x01, 0x00}         // Nav speed 2Hz
+			glonass = []byte{0x06, 0x04, 0x0E, 0x00, 0x01, 0x00, 0x01, 0x01} // this enables GLONASS with 4-14 tracking channels
+			galileo = []byte{0x02, 0x04, 0x08, 0x00, 0x01, 0x00, 0x01, 0x01} // this enables Galileo with 4-8 tracking channels
+			updatespeed = []byte{0xF4, 0x01, 0x01, 0x00, 0x01, 0x00}         // Nav speed 2Hz for u-blox 8
 		}
 		cfgGnss = append(cfgGnss, gps...)
 		cfgGnss = append(cfgGnss, sbas...)
@@ -306,7 +306,8 @@ func initGPSSerial() bool {
 		p.Write(makeUBXCFG(0x06, 0x3E, uint16(len(cfgGnss)), cfgGnss))
 
 		// SBAS configuration for ublox 6 and higher
-		p.Write(makeUBXCFG(0x06, 0x16, 8, []byte{0x01, 0x07, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00}))
+		// p.Write(makeUBXCFG(0x06, 0x16, 8, []byte{0x01, 0x07, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00}))
+		p.Write(makeUBXCFG(0x06, 0x16, 8, []byte{0x01, 0x07, 0x03, 0x00, 0x00, 0xE8, 0x04, 0x00})) // Use WAAS for North America
 		//Navigation Rate 10Hz for <= UBX7 2Hz for UBX8
 		p.Write(makeUBXCFG(0x06, 0x08, 6, updatespeed))
 
@@ -314,7 +315,7 @@ func initGPSSerial() bool {
 		//  UBX,04 (timing) every 10th, GGA (NMEA position) every 5th. All other NMEA messages disabled.
 
 		//                                             Msg   DDC   UART1 UART2 USB   I2C   Res
-		p.Write(makeUBXCFG(0x06, 0x01, 8, []byte{0xF0, 0x00, 0x00, 0x05, 0x00, 0x05, 0x00, 0x01})) // GGA enabled every 5th message
+		p.Write(makeUBXCFG(0x06, 0x01, 8, []byte{0xF0, 0x00, 0x00, 0x02, 0x00, 0x02, 0x00, 0x01})) // GGA enabled every 5th message
 		p.Write(makeUBXCFG(0x06, 0x01, 8, []byte{0xF0, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01})) // GLL disabled
 		p.Write(makeUBXCFG(0x06, 0x01, 8, []byte{0xF0, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01})) // GSA disabled
 		p.Write(makeUBXCFG(0x06, 0x01, 8, []byte{0xF0, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01})) // GSV disabled
@@ -329,11 +330,11 @@ func initGPSSerial() bool {
 		p.Write(makeUBXCFG(0x06, 0x01, 8, []byte{0xF0, 0x0E, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})) // ???
 		p.Write(makeUBXCFG(0x06, 0x01, 8, []byte{0xF0, 0x0F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})) // VLW
 		p.Write(makeUBXCFG(0x06, 0x01, 8, []byte{0xF1, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00})) // Ublox,0
-		p.Write(makeUBXCFG(0x06, 0x01, 8, []byte{0xF1, 0x03, 0x00, 0x05, 0x00, 0x05, 0x00, 0x00})) // Ublox,3
-		p.Write(makeUBXCFG(0x06, 0x01, 8, []byte{0xF1, 0x04, 0x00, 0x0A, 0x00, 0x0A, 0x00, 0x00})) // Ublox,4
+		p.Write(makeUBXCFG(0x06, 0x01, 8, []byte{0xF1, 0x03, 0x00, 0x02, 0x00, 0x02, 0x00, 0x00})) // Ublox,3
+		p.Write(makeUBXCFG(0x06, 0x01, 8, []byte{0xF1, 0x04, 0x00, 0x14, 0x00, 0x14, 0x00, 0x00})) // Ublox,4
 
 		// Set NMEA to v4.1
-		p.Write(makeUBXCFG(0x06, 0x17, 20, []byte{0x00, 0x41, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}))
+		//p.Write(makeUBXCFG(0x06, 0x17, 20, []byte{0x00, 0x41, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}))
 		
 		// Reconfigure serial port.
 		cfg := make([]byte, 20)
@@ -919,14 +920,14 @@ func processNMEALine(l string) (sentenceUsed bool) {
 			tmpSituation.GPSNACp = calculateNACp(tmpSituation.GPSHorizontalAccuracy)
 
 			// field 10 = vertical accuracy, m
-			/*
-				vAcc, err := strconv.ParseFloat(x[10], 32)
-				if err != nil {
-					return false
-				}
-				tmpSituation.GPSVerticalAccuracy = float32(vAcc * 2) // UBX reports 1-sigma variation; we want 95% confidence
-			*/
-			tmpSituation.GPSVerticalAccuracy = float32(2.) * tmpSituation.GPSHorizontalAccuracy
+			//
+			vAcc, err := strconv.ParseFloat(x[10], 32)
+			if err != nil {
+				return false
+			}
+			tmpSituation.GPSVerticalAccuracy = float32(vAcc * 2) // UBX reports 1-sigma variation; we want 95% confidence
+			//
+			//tmpSituation.GPSVerticalAccuracy = float32(2.) * tmpSituation.GPSHorizontalAccuracy
 
 			// field 2 = time
 			if len(x[2]) < 8 {
@@ -1108,9 +1109,9 @@ func processNMEALine(l string) (sentenceUsed bool) {
 				if sv < 33 { // indicates GPS
 					svType = SAT_TYPE_GPS
 					svStr = fmt.Sprintf("G%d", sv)
-				} else if sv < 65 { // indicates SBAS: WAAS, EGNOS, MSAS, etc.
+				} else if sv < 65 { // indicates Beidou
 					svType = SAT_TYPE_BEIDOU
-					svStr = fmt.Sprintf("B%d", sv-32) // add 87 to convert from NMEA to PRN.
+					svStr = fmt.Sprintf("B%d", sv-27)
 				} else if sv < 97 { // GLONASS
 					svType = SAT_TYPE_GLONASS
 					svStr = fmt.Sprintf("R%d", sv-64) // subtract 64 to convert from NMEA to PRN.
@@ -1118,6 +1119,9 @@ func processNMEALine(l string) (sentenceUsed bool) {
 					svType = SAT_TYPE_SBAS
 					svStr = fmt.Sprintf("S%d", sv)
 					sv -= 87 // subtract 87 to convert to NMEA from PRN.
+				} else if (sv >= 159) && (sv < 164) { // Beidou 1-5
+					svType = SAT_TYPE_BEIDOU
+					svStr = fmt.Sprintf("B%d", sv-158)
 				} else if sv > 210 {
 					svType = SAT_TYPE_GALILEO
 					svStr = fmt.Sprintf("E%d", sv-210)
